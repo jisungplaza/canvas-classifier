@@ -1,82 +1,520 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <title>캔버스 자동 분류</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>캔버스 자동 분류기</title>
   <style>
-    body { font-family: sans-serif; padding: 40px; max-width: 600px; }
-    h2 { margin-bottom: 10px; }
-    #fileInput { margin-top: 10px; margin-bottom: 20px; }
-    #result { margin-top: 20px; font-weight: bold; }
-    #result.ok { color: green; }
-    #result.err { color: red; }
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e2e8f0;
+      --brand:#2563eb;
+      --brand2:#1d4ed8;
+      --ok:#16a34a;
+      --err:#dc2626;
+      --shadow: 0 10px 30px rgba(15,23,42,.08);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", Arial, "Helvetica Neue", sans-serif;
+      color:var(--text);
+      background: radial-gradient(1200px 700px at 10% 0%, #e0ecff 0%, transparent 55%),
+                  radial-gradient(900px 500px at 90% 10%, #ffe7f1 0%, transparent 50%),
+                  var(--bg);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px 16px;
+    }
+    .wrap{
+      width:min(860px, 100%);
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap:18px;
+    }
+    @media (max-width: 820px){
+      .wrap{grid-template-columns:1fr}
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .header{
+      padding:22px 22px 14px;
+      border-bottom:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(37,99,235,.08), transparent);
+    }
+    .title{
+      margin:0;
+      font-size:24px;
+      letter-spacing:-.3px;
+    }
+    .subtitle{
+      margin:8px 0 0;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:14px;
+    }
+
+    /* 업로드 영역 */
+    .content{padding:18px 22px 22px}
+    .drop{
+      border:2px dashed #cbd5e1;
+      border-radius:16px;
+      padding:18px;
+      background:#fbfdff;
+      transition:.15s ease;
+      display:flex;
+      gap:14px;
+      align-items:flex-start;
+    }
+    .drop.dragover{
+      border-color: var(--brand);
+      background: rgba(37,99,235,.06);
+    }
+    .icon{
+      width:42px;height:42px;
+      border-radius:12px;
+      display:grid;place-items:center;
+      background: rgba(37,99,235,.12);
+      color: var(--brand2);
+      flex:0 0 auto;
+      margin-top:2px;
+    }
+    .drop h2{
+      margin:0;
+      font-size:16px;
+      letter-spacing:-.2px;
+    }
+    .drop p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .row{
+      margin-top:14px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .btn{
+      appearance:none;
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.15s ease;
+      display:inline-flex;
+      gap:8px;
+      align-items:center;
+    }
+    .btn.primary{
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      color:#fff;
+    }
+    .btn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+    .btn:hover:not(:disabled){transform: translateY(-1px)}
+    .fileName{
+      font-size:13px;
+      color:var(--muted);
+      font-family: var(--mono);
+      max-width:100%;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    input[type="file"]{display:none}
+
+    /* 상태 박스 */
+    .status{
+      margin-top:14px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px 12px;
+      background:#fff;
+    }
+    .statusLine{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+    }
+    .badge{
+      font-size:12px;
+      font-weight:800;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:#f8fafc;
+      color:var(--muted);
+    }
+    .badge.ok{background: rgba(22,163,74,.10); border-color: rgba(22,163,74,.25); color: var(--ok);}
+    .badge.err{background: rgba(220,38,38,.10); border-color: rgba(220,38,38,.25); color: var(--err);}
+    .msg{
+      margin-top:8px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    /* 진행바 */
+    .bar{
+      margin-top:10px;
+      height:10px;
+      background:#eef2ff;
+      border-radius:999px;
+      overflow:hidden;
+      border:1px solid rgba(37,99,235,.15);
+      display:none;
+    }
+    .bar > div{
+      width:0%;
+      height:100%;
+      background: linear-gradient(90deg, var(--brand), #60a5fa);
+      border-radius:999px;
+      transition: width .15s linear;
+    }
+
+    /* 우측 안내 카드 */
+    .side{padding:18px 20px 20px}
+    .side h3{margin:0;font-size:14px}
+    .side ul{
+      margin:10px 0 0;
+      padding-left:18px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.6;
+    }
+    .kv{
+      margin-top:14px;
+      border-top:1px dashed var(--line);
+      padding-top:14px;
+      display:grid;
+      gap:10px;
+    }
+    .kv .k{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .kv .k b{
+      color:var(--text);
+      font-family: var(--mono);
+      font-weight:800;
+    }
+    .footer{
+      padding:14px 20px;
+      border-top:1px solid var(--line);
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      background:#fff;
+    }
+    .link{
+      color:var(--brand2);
+      text-decoration:none;
+      font-weight:700;
+    }
   </style>
 </head>
 <body>
-  <h2>캔버스 자동 분류기</h2>
-  <p>엑셀 파일을 선택하면 자동으로 분류 결과 파일을 다운로드합니다.</p>
+  <div class="wrap">
 
-  <!-- ✅ 모든 파일 선택 가능 -->
-  <input type="file" id="fileInput" />
+    <!-- 메인 카드 -->
+    <section class="card">
+      <div class="header">
+        <h1 class="title">캔버스 자동 분류기</h1>
+        <p class="subtitle">
+          엑셀 파일을 업로드하면 자동으로 분류 결과 파일을 내려받습니다.
+          <br/>드래그&드롭도 지원합니다.
+        </p>
+      </div>
 
-  <p id="result"></p>
+      <div class="content">
+        <div id="drop" class="drop" aria-label="파일 드롭 영역">
+          <div class="icon" aria-hidden="true">
+            <!-- upload icon -->
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M7 8l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div style="flex:1">
+            <h2>파일을 여기에 놓거나, 버튼으로 선택하세요</h2>
+            <p>
+              권장: .xlsx / .xls<br/>
+              (파일 선택 창에서 <b>모든 파일(*.*)</b> 선택 가능)
+            </p>
+
+            <div class="row">
+              <label class="btn primary" for="fileInput">
+                <!-- file icon -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                  <path d="M14 2v6h6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                </svg>
+                파일 선택
+              </label>
+
+              <button id="uploadBtn" class="btn" disabled>
+                <!-- send icon -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                </svg>
+                업로드 & 변환
+              </button>
+
+              <div id="fileName" class="fileName">선택된 파일 없음</div>
+
+              <input
+                id="fileInput"
+                type="file"
+                accept="*/*"
+              />
+            </div>
+
+            <div class="status" role="status" aria-live="polite">
+              <div class="statusLine">
+                <span id="badge" class="badge">대기</span>
+                <span class="fileName" id="hint">파일을 선택하면 자동 다운로드됩니다.</span>
+              </div>
+              <div class="bar" id="bar"><div id="barFill"></div></div>
+              <div class="msg" id="msg">서버로 업로드 후 결과 xlsx를 반환합니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>© canvas-classifier</span>
+        <span>문제가 있으면 새로고침 후 다시 시도하세요.</span>
+      </div>
+    </section>
+
+    <!-- 사이드 카드 -->
+    <aside class="card">
+      <div class="header">
+        <h2 class="title" style="font-size:18px;margin:0">사용 안내</h2>
+        <p class="subtitle" style="margin-top:8px">
+          파일마다 헤더 위치가 달라도 자동으로 탐지합니다.
+        </p>
+      </div>
+      <div class="side">
+        <h3>지원 기능</h3>
+        <ul>
+          <li>멀티 시트 처리 (sheet_result + sheet_summary)</li>
+          <li>상품명(분류) / 아이템 코드 / 설명 / 수량 / 박스수 출력</li>
+          <li>요약줄(Grimso 등)은 상품명 출력 안 함</li>
+          <li>엑셀 스타일(테두리/헤더 굵게) 적용</li>
+        </ul>
+
+        <div class="kv">
+          <div class="k">
+            <span>업로드 엔드포인트</span>
+            <b id="endpoint">/upload</b>
+          </div>
+          <div class="k">
+            <span>출력 파일</span>
+            <b>_분류결과.xlsx</b>
+          </div>
+          <div class="k">
+            <span>권장 브라우저</span>
+            <b>Chrome/Edge</b>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;color:var(--muted);font-size:12px;line-height:1.5">
+          팁: 파일명이 길면 일부만 표시됩니다. 업로드 전에 파일명 확인 후 진행하세요.
+        </div>
+      </div>
+      <div class="footer">
+        <a class="link" href="javascript:location.reload()">페이지 새로고침</a>
+        <a class="link" href="javascript:void(0)" id="copyUrl">주소 복사</a>
+      </div>
+    </aside>
+
+  </div>
 
   <script>
     const fileInput = document.getElementById("fileInput");
-    const resultEl = document.getElementById("result");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const fileNameEl = document.getElementById("fileName");
+    const badgeEl = document.getElementById("badge");
+    const msgEl = document.getElementById("msg");
+    const hintEl = document.getElementById("hint");
+    const drop = document.getElementById("drop");
+    const bar = document.getElementById("bar");
+    const barFill = document.getElementById("barFill");
+    const endpointEl = document.getElementById("endpoint");
+    const copyUrl = document.getElementById("copyUrl");
 
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
+    const UPLOAD_URL = "/upload"; // 동일 도메인 기준
+    endpointEl.textContent = UPLOAD_URL;
+
+    function setBadge(type, text){
+      badgeEl.className = "badge" + (type ? " " + type : "");
+      badgeEl.textContent = text;
+    }
+
+    function setProgress(on, pct=0){
+      bar.style.display = on ? "block" : "none";
+      barFill.style.width = pct + "%";
+    }
+
+    function setFile(file){
+      if (!file){
+        fileNameEl.textContent = "선택된 파일 없음";
+        uploadBtn.disabled = true;
+        setBadge("", "대기");
+        hintEl.textContent = "파일을 선택하면 자동 다운로드됩니다.";
+        msgEl.textContent = "서버로 업로드 후 결과 xlsx를 반환합니다.";
+        return;
+      }
+      fileNameEl.textContent = file.name;
+      uploadBtn.disabled = false;
+      setBadge("", "준비됨");
+      hintEl.textContent = "업로드 & 변환을 누르세요.";
+      msgEl.textContent = "업로드가 시작됩니다.";
+    }
+
+    async function upload(file){
       if (!file) return;
 
-      resultEl.className = "";
-      resultEl.textContent = "처리 중입니다...";
+      setBadge("", "업로드 중");
+      msgEl.textContent = "업로드 및 변환 중입니다. 잠시만 기다려주세요.";
+      setProgress(true, 10);
+      uploadBtn.disabled = true;
 
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
+      try{
+        const fd = new FormData();
+        fd.append("file", file);
 
-        const res = await fetch("/upload", { method: "POST", body: formData });
+        // 진행바는 fetch로 실제 진행률을 알기 어려워 단계형 표시
+        setProgress(true, 35);
 
-        if (!res.ok) {
-          let msg = "서버 오류가 발생했습니다.";
-          try {
-            const t = await res.text();
-            if (t) msg = t;
-          } catch (_) {}
-          resultEl.className = "err";
-          resultEl.textContent = msg;
-          fileInput.value = "";
-          return;
+        const res = await fetch(UPLOAD_URL, { method:"POST", body: fd });
+        setProgress(true, 70);
+
+        if (!res.ok){
+          const t = await res.text();
+          throw new Error(t || ("HTTP " + res.status));
         }
 
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
+        setProgress(true, 90);
 
+        // 파일명 추출 (Content-Disposition)
+        let downloadName = "";
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename\*=(?:UTF-8'')?([^;]+)/i) || cd.match(/filename="([^"]+)"/i);
+        if (m) downloadName = decodeURIComponent((m[1] || "").trim().replace(/(^"|"$)/g,""));
+
+        if (!downloadName){
+          // fallback
+          downloadName = (file.name.replace(/\.[^/.]+$/, "") || "result") + "_분류결과.xlsx";
+        }
+
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-
-        // ✅ 파일명 깨짐 방지: 업로드한 원본 파일명 기준으로 저장명 고정
-        const baseName = file.name.replace(/\.[^/.]+$/, "");
-        a.download = baseName + "_분류결과.xlsx";
-
+        a.download = downloadName;
         document.body.appendChild(a);
         a.click();
         a.remove();
+        URL.revokeObjectURL(url);
 
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setProgress(true, 100);
+        setBadge("ok", "완료");
+        hintEl.textContent = "다운로드가 시작되었습니다.";
+        msgEl.innerHTML = "<b style='color:var(--ok)'>파일 처리 완료!</b> 분류 결과 파일이 다운로드되었습니다.";
+      }catch(err){
+        setBadge("err", "실패");
+        hintEl.textContent = "에러가 발생했습니다.";
+        msgEl.innerHTML = "<b style='color:var(--err)'>업로드 실패</b> — " + (err.message || err);
+      }finally{
+        setTimeout(()=>setProgress(false, 0), 800);
+        uploadBtn.disabled = !fileInput.files?.length;
+      }
+    }
 
-        resultEl.className = "ok";
-        resultEl.textContent = "파일 처리 완료! 분류 결과 파일이 다운로드되었습니다.";
-      } catch (err) {
-        console.error(err);
-        resultEl.className = "err";
-        resultEl.textContent = "요청 중 오류가 발생했습니다.";
-      } finally {
-        // 같은 파일 재선택 가능하게
-        fileInput.value = "";
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files && fileInput.files[0];
+      setFile(f);
+      // 기존처럼 자동 다운로드 원하면 여기서 upload(f) 호출하면 됨.
+      // setTimeout(() => upload(f), 50);
+    });
+
+    uploadBtn.addEventListener("click", () => {
+      const f = fileInput.files && fileInput.files[0];
+      upload(f);
+    });
+
+    // Drag & Drop
+    ["dragenter","dragover"].forEach(evt=>{
+      drop.addEventListener(evt, (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        drop.classList.add("dragover");
+      });
+    });
+    ["dragleave","drop"].forEach(evt=>{
+      drop.addEventListener(evt, (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        drop.classList.remove("dragover");
+      });
+    });
+    drop.addEventListener("drop", (e)=>{
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      // input에 반영
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      fileInput.files = dt.files;
+      setFile(f);
+    });
+
+    copyUrl.addEventListener("click", async ()=>{
+      try{
+        await navigator.clipboard.writeText(location.href);
+        setBadge("ok", "복사됨");
+        msgEl.innerHTML = "<b style='color:var(--ok)'>주소가 복사되었습니다.</b>";
+        setTimeout(()=>setFile(fileInput.files?.[0] || null), 1200);
+      }catch{
+        setBadge("err", "실패");
+        msgEl.innerHTML = "<b style='color:var(--err)'>복사 실패</b> 브라우저 권한을 확인하세요.";
       }
     });
+
+    // init
+    setFile(null);
   </script>
 </body>
 </html>
