@@ -4,35 +4,19 @@
   <meta charset="UTF-8" />
   <title>캔버스 자동 분류</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 40px;
-      max-width: 600px;
-    }
-    h2 {
-      margin-bottom: 10px;
-    }
-    #fileInput {
-      margin-top: 10px;
-      margin-bottom: 20px;
-    }
-    #result {
-      margin-top: 20px;
-      font-weight: bold;
-    }
-    #result.ok {
-      color: green;
-    }
-    #result.err {
-      color: red;
-    }
+    body { font-family: sans-serif; padding: 40px; max-width: 600px; }
+    h2 { margin-bottom: 10px; }
+    #fileInput { margin-top: 10px; margin-bottom: 20px; }
+    #result { margin-top: 20px; font-weight: bold; }
+    #result.ok { color: green; }
+    #result.err { color: red; }
   </style>
 </head>
 <body>
   <h2>캔버스 자동 분류기</h2>
   <p>엑셀 파일을 선택하면 자동으로 분류 결과 파일을 다운로드합니다.</p>
 
-  <!-- 🔹 확장자 제한 제거: accept 속성 삭제 -->
+  <!-- ✅ 모든 파일 선택 가능 -->
   <input type="file" id="fileInput" />
 
   <p id="result"></p>
@@ -52,22 +36,27 @@
         const formData = new FormData();
         formData.append("file", file);
 
-        const res = await fetch("/upload", {
-          method: "POST",
-          body: formData,
-        });
+        const res = await fetch("/upload", { method: "POST", body: formData });
 
         if (!res.ok) {
+          let msg = "서버 오류가 발생했습니다.";
+          try {
+            const t = await res.text();
+            if (t) msg = t;
+          } catch (_) {}
           resultEl.className = "err";
-          resultEl.textContent = "서버 오류가 발생했습니다.";
+          resultEl.textContent = msg;
+          fileInput.value = "";
           return;
         }
 
         const blob = await res.blob();
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
 
-        // 원래 파일명 + _분류결과.xlsx
+        const a = document.createElement("a");
+        a.href = url;
+
+        // ✅ 파일명 깨짐 방지: 업로드한 원본 파일명 기준으로 저장명 고정
         const baseName = file.name.replace(/\.[^/.]+$/, "");
         a.download = baseName + "_분류결과.xlsx";
 
@@ -75,12 +64,17 @@
         a.click();
         a.remove();
 
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
         resultEl.className = "ok";
         resultEl.textContent = "파일 처리 완료! 분류 결과 파일이 다운로드되었습니다.";
       } catch (err) {
         console.error(err);
         resultEl.className = "err";
         resultEl.textContent = "요청 중 오류가 발생했습니다.";
+      } finally {
+        // 같은 파일 재선택 가능하게
+        fileInput.value = "";
       }
     });
   </script>
