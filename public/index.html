@@ -60,16 +60,17 @@
     .content{padding:18px 22px 22px}
 
     /* 업로드 영역 */
-    .drop{
-      border:2px dashed #cbd5e1;
-      border-radius:16px;
-      padding:18px;
-      background:#fbfdff;
-      transition:.15s ease;
-      display:flex;
-      gap:14px;
-      align-items:flex-start;
-    }
+.drop{
+  border:1px solid var(--line); /* 점선 → 일반 테두리 */
+  border-radius:16px;
+  padding:18px;
+  background:#fbfdff;
+  transition:.15s ease;
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+}
+
     .drop.dragover{
       border-color: var(--brand);
       background: rgba(37,99,235,.06);
