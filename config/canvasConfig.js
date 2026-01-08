@@ -94,12 +94,33 @@ module.exports = {
   ],
 
   typeRules: [
-    { labelKo: "프레임 캔버스", keywords: ["frame canvas"] },
-    { labelKo: "백스플라인 캔버스", keywords: ["back spline"] },
-    { labelKo: "아사 캔버스", keywords: ["linen"] },
-    { labelKo: "블랙 캔버스", keywords: ["black"] },
-    { labelKo: "캔버스보드", keywords: ["canvas panel", "panel", "board", "3mm thickness"] },
-  ],
+  // ✅ 판넬 (캔버스보드와 명확히 분리)
+  {
+    labelKo: "판넬",
+    keywords: [
+      "birch panel",
+      "birch",
+      "paper lable",
+      "paper label",
+      "total thickness",
+      "1.8cm",
+      "30*30",
+      "30x30"
+    ],
+  },
+
+  // 기존 캔버스류
+  { labelKo: "프레임 캔버스", keywords: ["frame canvas"] },
+  { labelKo: "백스플라인 캔버스", keywords: ["back spline"] },
+  { labelKo: "아사 캔버스", keywords: ["linen"] },
+  { labelKo: "블랙 캔버스", keywords: ["black"] },
+
+  // 캔버스보드 (panel 키워드 제거)
+  {
+    labelKo: "캔버스보드",
+    keywords: ["canvas panel", "board", "3mm thickness"],
+  },
+],
 
   roundConfig: {
     keywords: ["dia", "ø", "⌀"],
