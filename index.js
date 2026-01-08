@@ -38,8 +38,20 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 /* ---------- 공통 유틸 ---------- */
 
+// ✅ 숫자 오타 보정 (예: 3..8 -> 3.8)
+function sanitizeNumericTypos(text) {
+  return (text || "")
+    .toString()
+    // "3..8" 같은 케이스를 "3.8"로 교정
+    .replace(/(\d)\.\.(\d)/g, "$1.$2")
+    // 혹시 "3...8" 처럼 더 많은 점이 들어오면 1개로 축소
+    .replace(/(\d)\.{2,}(\d)/g, "$1.$2");
+}
+
 function normalize(text) {
-  return (text || "").toString().trim().toLowerCase();
+  // ✅ 여기서 먼저 오타를 고치고 나서 소문자화
+  const fixed = sanitizeNumericTypos(text);
+  return fixed.toString().trim().toLowerCase();
 }
 
 /* ---------- triangle 인식 ---------- */
@@ -293,7 +305,11 @@ function applyTableBorders(ws, lastRowNumber, lastColNumber) {
     for (let c = 1; c <= lastColNumber; c++) {
       const cell = row.getCell(c);
       cell.border = THIN_BORDER;
-      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: "left",
+        wrapText: true,
+      };
     }
   }
 }
@@ -322,19 +338,18 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "no file" });
 
-   const originalNameRaw = req.file.originalname || "result";
+    const originalNameRaw = req.file.originalname || "result";
 
-// multer가 filename을 latin1로 줄 때가 있어 UTF-8로 복구
-let originalName = originalNameRaw;
-try {
-  originalName = Buffer.from(originalNameRaw, "latin1").toString("utf8");
-} catch (e) {
-  originalName = originalNameRaw;
-}
+    // multer가 filename을 latin1로 줄 때가 있어 UTF-8로 복구
+    let originalName = originalNameRaw;
+    try {
+      originalName = Buffer.from(originalNameRaw, "latin1").toString("utf8");
+    } catch (e) {
+      originalName = originalNameRaw;
+    }
 
-const baseName = originalName.replace(/\.[^/.]+$/, "");
-const downloadName = `${baseName}_분류결과.xlsx`;
-
+    const baseName = originalName.replace(/\.[^/.]+$/, "");
+    const downloadName = `${baseName}_분류결과.xlsx`;
 
     const inWB = xlsx.read(req.file.buffer, { type: "buffer" });
     const outWB = new ExcelJS.Workbook();
@@ -379,11 +394,11 @@ const downloadName = `${baseName}_분류결과.xlsx`;
         if (!result && !itemNo && !desc && !qty && !ctn) continue;
 
         filteredRows.push({
-          PRODUCT_NAME: result,   // 상품명(=기존 RESULT)
-          ITEM_CODE: itemNo,      // 아이템 코드(=기존 ITEM NO)
-          DESC_KO: desc,          // 설명(=기존 DESCRIPTION)
-          QTY_KO: qty,            // 수량(=기존 QUANTITY)
-          BOXES: ctn,             // 박스수
+          PRODUCT_NAME: result, // 상품명(=기존 RESULT)
+          ITEM_CODE: itemNo, // 아이템 코드(=기존 ITEM NO)
+          DESC_KO: desc, // 설명(=기존 DESCRIPTION)
+          QTY_KO: qty, // 수량(=기존 QUANTITY)
+          BOXES: ctn, // 박스수
         });
       }
 
@@ -408,8 +423,14 @@ const downloadName = `${baseName}_분류결과.xlsx`;
       applyTableBorders(outWS, lastRow, lastCol);
 
       // 수량/박스수 가운데 정렬
-      outWS.getColumn("QTY_KO").alignment = { vertical: "middle", horizontal: "center" };
-      outWS.getColumn("BOXES").alignment = { vertical: "middle", horizontal: "center" };
+      outWS.getColumn("QTY_KO").alignment = {
+        vertical: "middle",
+        horizontal: "center",
+      };
+      outWS.getColumn("BOXES").alignment = {
+        vertical: "middle",
+        horizontal: "center",
+      };
 
       // 컬럼 자동폭(아이템 코드는 15 고정)
       autoFitColumns(outWS, { ITEM_CODE: 15, QTY_KO: 12, BOXES: 12 });
@@ -441,9 +462,18 @@ const downloadName = `${baseName}_분류결과.xlsx`;
 
       applyTableBorders(sumWS, sLastRow, sLastCol);
 
-      sumWS.getColumn("SERIAL").alignment = { vertical: "middle", horizontal: "center" };
-      sumWS.getColumn("QTY").alignment = { vertical: "middle", horizontal: "center" };
-      sumWS.getColumn("BOXES").alignment = { vertical: "middle", horizontal: "center" };
+      sumWS.getColumn("SERIAL").alignment = {
+        vertical: "middle",
+        horizontal: "center",
+      };
+      sumWS.getColumn("QTY").alignment = {
+        vertical: "middle",
+        horizontal: "center",
+      };
+      sumWS.getColumn("BOXES").alignment = {
+        vertical: "middle",
+        horizontal: "center",
+      };
 
       autoFitColumns(sumWS, { OUR_ITEM_NO: 15, QTY: 12, BOXES: 12 });
     }
