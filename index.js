@@ -4,9 +4,10 @@
 // - 멀티 시트 처리
 // - 상품명 / 아이템 코드 / 설명 / 수량 / 박스수(CTN) 출력
 // - 아이템 코드 컬럼 폭 15 고정
-// - Serial / Our Item No. / Description / Quantity / Boxes 요약 시트 생성
-// - ITEM NO, QUANTITY, CTN(박스수) 모두 비면(Grimso 등) RESULT 비움
+// - 요약줄(ITEM NO, QUANTITY, CTN 모두 비면) RESULT 비움
 // - 스타일: 헤더 볼드+가운데, 전체 테두리, 기본 정렬
+// - 추가: 원본 구조가 달라 해석 불가능할 때 "실패" 메시지로 안내
+// - 변경: summary 시트 생성 제거 (결과 시트만 남김, 탭 이름은 원본 sheetName 그대로)
 
 const express = require("express");
 const multer = require("multer");
@@ -42,14 +43,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 function sanitizeNumericTypos(text) {
   return (text || "")
     .toString()
-    // "3..8" 같은 케이스를 "3.8"로 교정
     .replace(/(\d)\.\.(\d)/g, "$1.$2")
-    // 혹시 "3...8" 처럼 더 많은 점이 들어오면 1개로 축소
     .replace(/(\d)\.{2,}(\d)/g, "$1.$2");
 }
 
 function normalize(text) {
-  // ✅ 여기서 먼저 오타를 고치고 나서 소문자화
   const fixed = sanitizeNumericTypos(text);
   return fixed.toString().trim().toLowerCase();
 }
@@ -356,6 +354,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     outWB.creator = "canvas-classifier";
     outWB.created = new Date();
 
+    let processedSheets = 0;
+
     for (const sheetName of inWB.SheetNames) {
       const ws = inWB.Sheets[sheetName];
       if (!ws) continue;
@@ -365,7 +365,20 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
       const { headerRowIndex, itemCol, descCol, qtyCol, ctnCol } =
         findHeaderInfo(rows);
-      if (headerRowIndex === -1) continue;
+
+      // ✅ 실패 안내(구조가 달라 해석 불가)
+      if (headerRowIndex === -1) {
+        throw new Error(
+          `엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\n헤더(ITEM NO / DESCRIPTION / QUANTITY / CTN)를 찾지 못했습니다.`
+        );
+      }
+      const missingCore =
+        (itemCol === -1 ? 1 : 0) + (descCol === -1 ? 1 : 0) + (qtyCol === -1 ? 1 : 0);
+      if (missingCore >= 2) {
+        throw new Error(
+          `엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\nITEM NO / DESCRIPTION / QUANTITY 중 다수가 없습니다.`
+        );
+      }
 
       const filteredRows = [];
 
@@ -394,19 +407,17 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         if (!result && !itemNo && !desc && !qty && !ctn) continue;
 
         filteredRows.push({
-          PRODUCT_NAME: result, // 상품명(=기존 RESULT)
-          ITEM_CODE: itemNo, // 아이템 코드(=기존 ITEM NO)
-          DESC_KO: desc, // 설명(=기존 DESCRIPTION)
-          QTY_KO: qty, // 수량(=기존 QUANTITY)
+          PRODUCT_NAME: result, // 상품명
+          ITEM_CODE: itemNo, // 아이템 코드
+          DESC_KO: desc, // 설명
+          QTY_KO: qty, // 수량
           BOXES: ctn, // 박스수
         });
       }
 
-      /* -------- result 시트 -------- */
-      const resultSheetName = `${sheetName}_result`.slice(0, 31);
-      const outWS = outWB.addWorksheet(resultSheetName);
+      // ✅ 결과 시트만 생성 (summary 시트 삭제 반영 완료)
+      const outWS = outWB.addWorksheet(sheetName.slice(0, 31));
 
-      // ✅ 수량/박스수 폭 동일(12)
       setWorksheetColumns(outWS, [
         { header: "상품명", key: "PRODUCT_NAME", width: 20 },
         { header: "아이템 코드", key: "ITEM_CODE", width: 15 }, // 고정 15
@@ -422,60 +433,22 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
       applyTableBorders(outWS, lastRow, lastCol);
 
-      // 수량/박스수 가운데 정렬
-      outWS.getColumn("QTY_KO").alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-      outWS.getColumn("BOXES").alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-
-      // 컬럼 자동폭(아이템 코드는 15 고정)
-      autoFitColumns(outWS, { ITEM_CODE: 15, QTY_KO: 12, BOXES: 12 });
-
-      /* -------- summary 시트 -------- */
-      const summarySheetName = `${sheetName}_summary`.slice(0, 31);
-      const sumWS = outWB.addWorksheet(summarySheetName);
-
-      setWorksheetColumns(sumWS, [
-        { header: "Serial", key: "SERIAL", width: 8 },
-        { header: "Our Item No.", key: "OUR_ITEM_NO", width: 15 },
-        { header: "Description", key: "DESC", width: 40 },
-        { header: "Quantity", key: "QTY", width: 12 },
-        { header: "Boxes", key: "BOXES", width: 12 }, // Quantity와 동일
-      ]);
-
-      filteredRows.forEach((r, idx) => {
-        sumWS.addRow({
-          SERIAL: idx + 1,
-          OUR_ITEM_NO: r.ITEM_CODE,
-          DESC: r.DESC_KO,
-          QTY: r.QTY_KO,
-          BOXES: r.BOXES,
-        });
+      // 수량/박스수 가운데 정렬 (컬럼별)
+      outWS.getColumn("QTY_KO").eachCell((cell) => {
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      });
+      outWS.getColumn("BOXES").eachCell((cell) => {
+        cell.alignment = { vertical: "middle", horizontal: "center" };
       });
 
-      const sLastRow = sumWS.rowCount;
-      const sLastCol = sumWS.columnCount;
+      // 컬럼 자동폭(아이템 코드는 15 고정, 수량/박스수는 12 유지)
+      autoFitColumns(outWS, { ITEM_CODE: 15, QTY_KO: 12, BOXES: 12 });
 
-      applyTableBorders(sumWS, sLastRow, sLastCol);
+      processedSheets++;
+    }
 
-      sumWS.getColumn("SERIAL").alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-      sumWS.getColumn("QTY").alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-      sumWS.getColumn("BOXES").alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-
-      autoFitColumns(sumWS, { OUR_ITEM_NO: 15, QTY: 12, BOXES: 12 });
+    if (processedSheets === 0) {
+      throw new Error("처리 가능한 시트가 없습니다. (빈 파일이거나 구조가 다릅니다)");
     }
 
     const buf = await outWB.xlsx.writeBuffer();
@@ -487,7 +460,12 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.send(Buffer.from(buf));
   } catch (e) {
     console.error("UPLOAD ERROR:", e);
-    res.status(500).json({ error: e.message });
+
+    // ✅ 구조 불일치/실패는 400으로 내려서 프론트에서 '실패' 표기 가능
+    res.status(400).json({
+      success: false,
+      message: e.message || "처리 실패",
+    });
   }
 });
 
