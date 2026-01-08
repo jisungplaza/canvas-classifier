@@ -1,4 +1,4 @@
-<!-- public/index.html (전체 코드) -->
+<!-- public/index.html (전체 코드: 이전 세련톤 유지 + 안내문만 추가) -->
 <!doctype html>
 <html lang="ko">
 <head>
@@ -6,45 +6,172 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>캔버스 자동 분류기</title>
   <style>
-    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;margin:0;padding:32px;background:#fff;color:#111}
-    .wrap{max-width:720px;margin:0 auto}
-    h1{margin:0 0 12px;font-size:34px}
-    .desc{margin:0 0 18px;color:#444;line-height:1.5}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input[type="file"]{font-size:14px}
-    .status{margin-top:14px;font-size:16px}
-    .ok{color:#0a7a27;font-weight:700}
-    .err{color:#b00020;font-weight:700}
-    .note{
-      margin-top:10px;
-      padding:10px 12px;
-      border:1px solid #ddd;
-      border-radius:10px;
-      background:#fafafa;
-      color:#333;
-      font-size:14px;
-      line-height:1.45;
+    :root{
+      --bg:#0b1220;
+      --card:#0f1b33;
+      --card2:#0c162b;
+      --text:#eaf0ff;
+      --muted:rgba(234,240,255,.74);
+      --line:rgba(234,240,255,.12);
+      --accent:#6aa9ff;
+      --accent2:#7cf0c1;
+      --danger:#ff5d6c;
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius:18px;
     }
-    .note strong{color:#111}
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      background:
+        radial-gradient(900px 500px at 20% 10%, rgba(106,169,255,.18), transparent 60%),
+        radial-gradient(900px 500px at 80% 20%, rgba(124,240,193,.14), transparent 55%),
+        linear-gradient(180deg, var(--bg), #070b14 70%);
+      color:var(--text);
+      padding:40px 18px;
+      min-height:100vh;
+    }
+    .wrap{max-width:860px;margin:0 auto}
+    .hero{margin-bottom:18px}
+    h1{
+      margin:0 0 10px;
+      font-size:34px;
+      letter-spacing:-.4px;
+      line-height:1.2;
+    }
+    .sub{
+      margin:0;
+      color:var(--muted);
+      line-height:1.6;
+      font-size:15px;
+    }
+
+    .card{
+      margin-top:18px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      overflow:hidden;
+    }
+    .card-inner{
+      padding:22px;
+      background:
+        radial-gradient(700px 280px at 20% 0%, rgba(106,169,255,.12), transparent 60%),
+        radial-gradient(700px 280px at 90% 10%, rgba(124,240,193,.10), transparent 55%),
+        linear-gradient(180deg, rgba(15,27,51,.85), rgba(12,22,43,.85));
+    }
+
+    .upload-row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    /* 파일 선택 버튼(기본 input을 커스텀) */
+    input[type="file"]{display:none}
+    .file-btn{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      cursor:pointer;
+      user-select:none;
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+    }
+    .file-btn:hover{
+      background: rgba(255,255,255,.09);
+      border-color: rgba(255,255,255,.22);
+    }
+    .file-btn:active{transform: translateY(1px)}
+    .dot{
+      width:10px;height:10px;border-radius:999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 0 4px rgba(106,169,255,.12);
+      flex:0 0 auto;
+    }
+    .file-name{
+      color:var(--muted);
+      font-size:14px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:520px;
+    }
+
+    .status{
+      margin-top:14px;
+      font-size:14px;
+      color:var(--muted);
+      min-height:20px;
+    }
+    .status.ok{color:rgba(124,240,193,.95);font-weight:700}
+    .status.err{color:rgba(255,93,108,.95);font-weight:700}
+
+    /* ✅ 변경점: 항상 노출 안내문(세련톤 유지) */
+    .notice{
+      margin-top:14px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.18);
+      color:var(--muted);
+      line-height:1.55;
+      font-size:13px;
+    }
+    .notice b{color:rgba(234,240,255,.92)}
+    .notice .warn{
+      color: rgba(255,93,108,.92);
+      font-weight:800;
+      letter-spacing:-.2px;
+    }
+
+    .footer{
+      margin-top:14px;
+      color: rgba(234,240,255,.45);
+      font-size:12px;
+    }
+
+    @media (max-width:520px){
+      h1{font-size:28px}
+      .file-name{max-width:100%}
+      .card-inner{padding:18px}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>캔버스 자동 분류기</h1>
-    <p class="desc">엑셀 파일을 선택하면 자동으로 분류 결과 파일이 다운로드됩니다.</p>
-
-    <div class="row">
-      <input id="fileInput" type="file" accept="*/*" />
-      <span id="fileName" style="color:#555;font-size:14px"></span>
+    <div class="hero">
+      <h1>캔버스 자동 분류기</h1>
+      <p class="sub">엑셀 파일을 선택하면 자동으로 분류 결과 파일이 다운로드됩니다.</p>
     </div>
 
-    <!-- ✅ 업로드 버튼 하단에 "항상 노출" 안내문 -->
-    <div class="note">
-      <strong>주의:</strong> 업로드한 엑셀 파일 형식(헤더/열 구성)이 기존 설정과 다르면 변환이 실패할 수 있어요.<br/>
-      예) <b>ITEM NO / DESCRIPTION / QUANTITY / CTN</b> 같은 헤더 위치·구성이 크게 다를 경우 오류가 발생합니다.
-    </div>
+    <div class="card">
+      <div class="card-inner">
+        <div class="upload-row">
+          <label class="file-btn" for="fileInput">
+            <span class="dot"></span>
+            <span>파일 선택</span>
+          </label>
+          <input id="fileInput" type="file" accept="*/*" />
+          <div id="fileName" class="file-name"></div>
+        </div>
 
-    <div id="status" class="status"></div>
+        <!-- ✅ 변경점만 추가: 항상 노출 안내문 -->
+        <div class="notice">
+          <span class="warn">주의</span> 업로드한 엑셀 파일의 형식(헤더/열 구성)이 기존 설정과 다르면 변환이 실패할 수 있어요.<br/>
+          예) <b>ITEM NO / DESCRIPTION / QUANTITY / CTN</b> 등의 헤더 위치·구성이 크게 다를 경우 오류가 발생합니다.
+        </div>
+
+        <div id="status" class="status"></div>
+        <div class="footer">파일 선택 후 자동 업로드/변환됩니다.</div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -69,11 +196,10 @@
         const res = await fetch("/upload", { method: "POST", body: formData });
 
         if (!res.ok) {
-          // 서버가 400 JSON으로 내려주는 실패 메시지 처리
           let msg = "처리 실패";
           try {
             const j = await res.json();
-            msg = j?.message || msg;
+            msg = j?.message || j?.error || msg;
           } catch (_) {}
           statusEl.className = "status err";
           statusEl.textContent = "실패: " + msg;
@@ -82,7 +208,7 @@
 
         const blob = await res.blob();
 
-        // 파일명 추출 (Content-Disposition)
+        // Content-Disposition에서 파일명 추출
         let filename = "분류결과.xlsx";
         const cd = res.headers.get("Content-Disposition") || "";
         const match = cd.match(/filename\*\=UTF-8''([^;]+)/i);
@@ -104,7 +230,7 @@
         statusEl.textContent = "실패: 네트워크/서버 오류가 발생했습니다.";
         console.error(err);
       } finally {
-        // 같은 파일 재업로드 가능하게 값 초기화
+        // 같은 파일 재업로드 가능하게 초기화
         fileInput.value = "";
       }
     });
