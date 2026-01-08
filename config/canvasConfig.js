@@ -93,8 +93,8 @@ module.exports = {
     { w: 130.3, h: 130.3, code: "100S" },
   ],
 
-  typeRules: [
-  // ✅ 판넬 (캔버스보드와 명확히 분리)
+typeRules: [
+  // ✅ 판넬 (천 정보 없을 때 기본으로 여기로)
   {
     labelKo: "판넬",
     keywords: [
@@ -105,7 +105,10 @@ module.exports = {
       "total thickness",
       "1.8cm",
       "30*30",
-      "30x30"
+      "30x30",
+      // ✅ canvas panel 문구가 들어오되 cotton 정보가 없으면 판넬로 가게끔
+      "canvas panel",
+      "panel"
     ],
   },
 
@@ -115,12 +118,22 @@ module.exports = {
   { labelKo: "아사 캔버스", keywords: ["linen"] },
   { labelKo: "블랙 캔버스", keywords: ["black"] },
 
-  // 캔버스보드 (panel 키워드 제거)
+  // ✅ 캔버스보드: typeRules에서는 "천 정보" 키워드만 잡게 해두고,
+  // 최종 결정은 index.js에서 panel 계열일 때 cotton 포함이면 캔버스보드로 덮어씀
   {
     labelKo: "캔버스보드",
-    keywords: ["canvas panel", "board", "3mm thickness"],
+    keywords: [
+      "cotton",
+      "gms",
+      "gsm",
+      "280gms",
+      "280 gsm",
+      "5309",
+      "made in china"
+    ],
   },
 ],
+
 
   roundConfig: {
     keywords: ["dia", "ø", "⌀"],
