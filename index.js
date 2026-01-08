@@ -322,9 +322,19 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "no file" });
 
-    const originalName = req.file.originalname || "result";
-    const baseName = originalName.replace(/\.[^/.]+$/, "");
-    const downloadName = `${baseName}_분류결과.xlsx`;
+   const originalNameRaw = req.file.originalname || "result";
+
+// multer가 filename을 latin1로 줄 때가 있어 UTF-8로 복구
+let originalName = originalNameRaw;
+try {
+  originalName = Buffer.from(originalNameRaw, "latin1").toString("utf8");
+} catch (e) {
+  originalName = originalNameRaw;
+}
+
+const baseName = originalName.replace(/\.[^/.]+$/, "");
+const downloadName = `${baseName}_분류결과.xlsx`;
+
 
     const inWB = xlsx.read(req.file.buffer, { type: "buffer" });
     const outWB = new ExcelJS.Workbook();
