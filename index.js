@@ -8,6 +8,7 @@
 // - 스타일: 헤더 볼드+가운데, 전체 테두리, 기본 정렬
 // - 추가: 원본 구조가 달라 해석 불가능할 때 "실패" 메시지로 안내
 // - 변경: summary 시트 생성 제거 (결과 시트만 남김, 탭 이름은 원본 sheetName 그대로)
+// - 추가: 엑셀 열 너비를 가장 긴 텍스트 기준으로 자동 조절(한글 넓이 보정 포함)
 
 const express = require("express");
 const multer = require("multer");
@@ -312,21 +313,59 @@ function applyTableBorders(ws, lastRowNumber, lastColNumber) {
   }
 }
 
+/* ---------- 엑셀 자동 열너비 ---------- */
+
+function getExcelTextWidth(value) {
+  if (value == null) return 0;
+
+  const text = value.toString();
+  let width = 0;
+
+  for (const ch of text) {
+    // 한글/한자/일본어/전각 영문/전각 숫자 등은 넓게 계산
+    if (/[ㄱ-ㅎㅏ-ㅣ가-힣一-龥㐀-䶵぀-ヿＡ-Ｚａ-ｚ０-９]/.test(ch)) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+
+  return width;
+}
+
 function autoFitColumns(ws, fixedMap = {}) {
   ws.columns.forEach((col) => {
     const key = col.key || col.header;
+
+    // 고정폭 컬럼은 그대로 유지
     if (fixedMap[key] != null) {
       col.width = fixedMap[key];
       return;
     }
 
-    let max = col.header ? col.header.toString().length : 10;
-    col.eachCell({ includeEmpty: false }, (cell) => {
-      const v = cell.value == null ? "" : cell.value.toString();
-      if (v.length > max) max = v.length;
+    let maxWidth = getExcelTextWidth(col.header || "");
+
+    col.eachCell({ includeEmpty: true }, (cell) => {
+      let cellValue = cell.value;
+
+      // richText 대응
+      if (cellValue && typeof cellValue === "object" && cellValue.richText) {
+        cellValue = cellValue.richText.map((r) => r.text).join("");
+      }
+
+      // 줄바꿈이 있으면 가장 긴 줄 기준으로 계산
+      const lines = (cellValue == null ? "" : cellValue.toString()).split(/\r?\n/);
+
+      for (const line of lines) {
+        const lineWidth = getExcelTextWidth(line);
+        if (lineWidth > maxWidth) {
+          maxWidth = lineWidth;
+        }
+      }
     });
 
-    col.width = Math.min(max + 2, 60);
+    // 여백 2칸, 최대 60 제한
+    col.width = Math.min(maxWidth + 2, 60);
   });
 }
 
@@ -372,8 +411,12 @@ app.post("/upload", upload.single("file"), async (req, res) => {
           `엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\n헤더(ITEM NO / DESCRIPTION / QUANTITY / CTN)를 찾지 못했습니다.`
         );
       }
+
       const missingCore =
-        (itemCol === -1 ? 1 : 0) + (descCol === -1 ? 1 : 0) + (qtyCol === -1 ? 1 : 0);
+        (itemCol === -1 ? 1 : 0) +
+        (descCol === -1 ? 1 : 0) +
+        (qtyCol === -1 ? 1 : 0);
+
       if (missingCore >= 2) {
         throw new Error(
           `엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\nITEM NO / DESCRIPTION / QUANTITY 중 다수가 없습니다.`
@@ -415,15 +458,15 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         });
       }
 
-      // ✅ 결과 시트만 생성 (summary 시트 삭제 반영 완료)
+      // ✅ 결과 시트만 생성
       const outWS = outWB.addWorksheet(sheetName.slice(0, 31));
 
       setWorksheetColumns(outWS, [
         { header: "상품명", key: "PRODUCT_NAME", width: 20 },
-        { header: "아이템 코드", key: "ITEM_CODE", width: 15 }, // 고정 15
+        { header: "아이템 코드", key: "ITEM_CODE", width: 15 },
         { header: "설명", key: "DESC_KO", width: 40 },
         { header: "수량", key: "QTY_KO", width: 12 },
-        { header: "박스수", key: "BOXES", width: 12 }, // 수량과 동일
+        { header: "박스수", key: "BOXES", width: 12 },
       ]);
 
       filteredRows.forEach((r) => outWS.addRow(r));
@@ -433,16 +476,21 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
       applyTableBorders(outWS, lastRow, lastCol);
 
-      // 수량/박스수 가운데 정렬 (컬럼별)
+      // 수량/박스수 가운데 정렬
       outWS.getColumn("QTY_KO").eachCell((cell) => {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       });
+
       outWS.getColumn("BOXES").eachCell((cell) => {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       });
 
-      // 컬럼 자동폭(아이템 코드는 15 고정, 수량/박스수는 12 유지)
-      autoFitColumns(outWS, { ITEM_CODE: 15, QTY_KO: 12, BOXES: 12 });
+      // 자동 열너비 적용
+      autoFitColumns(outWS, {
+        ITEM_CODE: 15,
+        QTY_KO: 12,
+        BOXES: 12,
+      });
 
       processedSheets++;
     }
@@ -461,7 +509,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   } catch (e) {
     console.error("UPLOAD ERROR:", e);
 
-    // ✅ 구조 불일치/실패는 400으로 내려서 프론트에서 '실패' 표기 가능
     res.status(400).json({
       success: false,
       message: e.message || "처리 실패",
