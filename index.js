@@ -1,14 +1,4 @@
-// index.js — 캔버스 자동 분류 서버 (스타일 포함 exceljs 버전)
-// - 입력 엑셀 읽기: xlsx
-// - 출력 엑셀 생성/스타일: exceljs
-// - 멀티 시트 처리
-// - 상품명 / 아이템 코드 / 설명 / 수량 / 박스수(CTN) 출력
-// - 아이템 코드 컬럼 폭 15 고정
-// - 요약줄(ITEM NO, QUANTITY, CTN 모두 비면) RESULT 비움
-// - 스타일: 헤더 볼드+가운데, 전체 테두리, 기본 정렬
-// - 추가: 원본 구조가 달라 해석 불가능할 때 "실패" 메시지로 안내
-// - 변경: summary 시트 생성 제거 (결과 시트만 남김, 탭 이름은 원본 sheetName 그대로)
-// - 추가: 엑셀 열 너비를 가장 긴 텍스트 기준으로 자동 조절(한글 넓이 보정 포함)
+// index.js — 캔버스 자동 분류 서버
 
 const express = require("express");
 const multer = require("multer");
@@ -38,9 +28,6 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-/* ---------- 공통 유틸 ---------- */
-
-// ✅ 숫자 오타 보정 (예: 3..8 -> 3.8)
 function sanitizeNumericTypos(text) {
   return (text || "")
     .toString()
@@ -53,7 +40,12 @@ function normalize(text) {
   return fixed.toString().trim().toLowerCase();
 }
 
-/* ---------- triangle 인식 ---------- */
+// ✅ ITEM CODE 비교용 정리 함수
+function cleanCode(v) {
+  return String(v || "")
+    .replace(/[\s\u200B-\u200D\uFEFF]/g, "")
+    .toUpperCase();
+}
 
 function detectTriangle(text) {
   const t = normalize(text);
@@ -63,26 +55,18 @@ function detectTriangle(text) {
   return parseFloat(m[1]);
 }
 
-/* ---------- 원형 인식 ---------- */
-
 function detectRound(text) {
   const t = normalize(text);
 
   const mDia = t.match(/dia[^0-9]*([0-9]{1,3}(\.[0-9]+)?)/i);
-  if (mDia) {
-    const d = parseFloat(mDia[1]);
-    return { isRound: true, diameter: d };
-  }
+  if (mDia) return { isRound: true, diameter: parseFloat(mDia[1]) };
 
   const found = roundConfig.keywords.some((kw) => t.includes(kw));
   if (!found) return null;
 
   const num = t.match(/(\d+(\.\d+)?)/);
-  const d = num ? parseFloat(num[1]) : null;
-  return { isRound: true, diameter: d };
+  return { isRound: true, diameter: num ? parseFloat(num[1]) : null };
 }
-
-/* ---------- 타입 인식 ---------- */
 
 function detectType(text) {
   const t = normalize(text);
@@ -91,8 +75,6 @@ function detectType(text) {
   }
   return defaultTypeLabel;
 }
-
-/* ---------- 크기 파싱 ---------- */
 
 function parseSize(text) {
   const t = normalize(text);
@@ -108,6 +90,7 @@ function parseSize(text) {
     const w = parseFloat(match[1]);
     const h = parseFloat(match[3]);
     const area = w * h;
+
     if (area > bestArea) {
       bestArea = area;
       best = { w, h };
@@ -117,8 +100,6 @@ function parseSize(text) {
   if (!best) return null;
   return { shape: "rect", w: best.w, h: best.h };
 }
-
-/* ---------- 두께 파싱 ---------- */
 
 function detectThickness(text, hoNumber) {
   if (hoNumber == null) return null;
@@ -135,11 +116,13 @@ function detectThickness(text, hoNumber) {
     const w = parseFloat(match[1]);
     const h = parseFloat(match[3]);
     const area = w * h;
+
     if (area < smallestArea) {
       smallestArea = area;
       smallest = { w, h };
     }
   }
+
   if (!smallest) return null;
 
   let best = null;
@@ -147,16 +130,19 @@ function detectThickness(text, hoNumber) {
 
   for (const rule of thicknessMap) {
     if (!rule.nos || !rule.nos.includes(hoNumber)) continue;
-    const score = Math.abs(rule.w - smallest.w) + Math.abs(rule.h - smallest.h);
+
+    const score1 = Math.abs(rule.w - smallest.w) + Math.abs(rule.h - smallest.h);
+    const score2 = Math.abs(rule.w - smallest.h) + Math.abs(rule.h - smallest.w);
+    const score = Math.min(score1, score2);
+
     if (score < bestScore && score <= thicknessTolerance) {
       bestScore = score;
       best = rule;
     }
   }
+
   return best ? best.labelKo : null;
 }
-
-/* ---------- 호수 매칭 ---------- */
 
 function findSizeCode(w, h) {
   let best = null;
@@ -175,10 +161,9 @@ function findSizeCode(w, h) {
       bestScore = score;
     }
   }
+
   return best;
 }
-
-/* ---------- 한 줄 분류 ---------- */
 
 function classifyText(fullText) {
   const text = (fullText || "").toString();
@@ -209,6 +194,7 @@ function classifyText(fullText) {
 
   if (parsed && parsed.shape === "rect") {
     const matched = findSizeCode(parsed.w, parsed.h);
+
     if (matched) {
       code = matched.code;
       const num = parseInt(matched.code.replace(/[^0-9]/g, ""), 10);
@@ -220,6 +206,7 @@ function classifyText(fullText) {
 
   let thicknessType = null;
   const isExcluded = excludedForThickness.some((x) => lower.includes(x));
+
   if (!isExcluded && hoNumber !== null) {
     thicknessType = detectThickness(text, hoNumber);
   }
@@ -228,10 +215,9 @@ function classifyText(fullText) {
 
   if (code) return `${finalType} ${code}`.trim();
   if (sizeLabel) return `${finalType} ${sizeLabel}`.trim();
+
   return finalType;
 }
-
-/* ---------- 헤더 탐색 ---------- */
 
 function normCell(v) {
   return (v ?? "").toString().trim().toUpperCase().replace(/\s+/g, "");
@@ -246,6 +232,7 @@ function findHeaderInfo(rows) {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] || [];
+
     for (let j = 0; j < row.length; j++) {
       const n = normCell(row[j]);
       if (!n) continue;
@@ -275,8 +262,6 @@ function findHeaderInfo(rows) {
   return { headerRowIndex, itemCol, descCol, qtyCol, ctnCol };
 }
 
-/* ---------- ExcelJS 스타일 유틸 ---------- */
-
 const THIN_BORDER = {
   top: { style: "thin" },
   left: { style: "thin" },
@@ -301,6 +286,7 @@ function applyTableBorders(ws, lastRowNumber, lastColNumber) {
   for (let r = 2; r <= lastRowNumber; r++) {
     const row = ws.getRow(r);
     row.height = 16;
+
     for (let c = 1; c <= lastColNumber; c++) {
       const cell = row.getCell(c);
       cell.border = THIN_BORDER;
@@ -313,8 +299,6 @@ function applyTableBorders(ws, lastRowNumber, lastColNumber) {
   }
 }
 
-/* ---------- 엑셀 자동 열너비 ---------- */
-
 function getExcelTextWidth(value) {
   if (value == null) return 0;
 
@@ -322,7 +306,6 @@ function getExcelTextWidth(value) {
   let width = 0;
 
   for (const ch of text) {
-    // 한글/한자/일본어/전각 영문/전각 숫자 등은 넓게 계산
     if (/[ㄱ-ㅎㅏ-ㅣ가-힣一-龥㐀-䶵぀-ヿＡ-Ｚａ-ｚ０-９]/.test(ch)) {
       width += 2;
     } else {
@@ -337,7 +320,6 @@ function autoFitColumns(ws, fixedMap = {}) {
   ws.columns.forEach((col) => {
     const key = col.key || col.header;
 
-    // 고정폭 컬럼은 그대로 유지
     if (fixedMap[key] != null) {
       col.width = fixedMap[key];
       return;
@@ -348,28 +330,21 @@ function autoFitColumns(ws, fixedMap = {}) {
     col.eachCell({ includeEmpty: true }, (cell) => {
       let cellValue = cell.value;
 
-      // richText 대응
       if (cellValue && typeof cellValue === "object" && cellValue.richText) {
         cellValue = cellValue.richText.map((r) => r.text).join("");
       }
 
-      // 줄바꿈이 있으면 가장 긴 줄 기준으로 계산
       const lines = (cellValue == null ? "" : cellValue.toString()).split(/\r?\n/);
 
       for (const line of lines) {
         const lineWidth = getExcelTextWidth(line);
-        if (lineWidth > maxWidth) {
-          maxWidth = lineWidth;
-        }
+        if (lineWidth > maxWidth) maxWidth = lineWidth;
       }
     });
 
-    // 여백 2칸, 최대 60 제한
     col.width = Math.min(maxWidth + 2, 60);
   });
 }
-
-/* ---------- 업로드 API ---------- */
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
@@ -377,7 +352,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
     const originalNameRaw = req.file.originalname || "result";
 
-    // multer가 filename을 latin1로 줄 때가 있어 UTF-8로 복구
     let originalName = originalNameRaw;
     try {
       originalName = Buffer.from(originalNameRaw, "latin1").toString("utf8");
@@ -390,6 +364,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
     const inWB = xlsx.read(req.file.buffer, { type: "buffer" });
     const outWB = new ExcelJS.Workbook();
+
     outWB.creator = "canvas-classifier";
     outWB.created = new Date();
 
@@ -405,7 +380,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       const { headerRowIndex, itemCol, descCol, qtyCol, ctnCol } =
         findHeaderInfo(rows);
 
-      // ✅ 실패 안내(구조가 달라 해석 불가)
       if (headerRowIndex === -1) {
         throw new Error(
           `엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\n헤더(ITEM NO / DESCRIPTION / QUANTITY / CTN)를 찾지 못했습니다.`
@@ -436,8 +410,16 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         let result = "";
 
         if (itemNo || qty || ctn) {
-          if (itemNo && manualOverrides && manualOverrides[itemNo]) {
-            const ov = manualOverrides[itemNo];
+          const itemKey = cleanCode(itemNo);
+
+          const overrideKey = manualOverrides
+            ? Object.keys(manualOverrides).find(
+                (key) => cleanCode(key) === itemKey
+              )
+            : null;
+
+          if (overrideKey) {
+            const ov = manualOverrides[overrideKey];
             result = `${ov.kind || defaultTypeLabel} ${ov.code || ""}`.trim();
           } else {
             const text = rowArr.join(" ");
@@ -450,15 +432,14 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         if (!result && !itemNo && !desc && !qty && !ctn) continue;
 
         filteredRows.push({
-          PRODUCT_NAME: result, // 상품명
-          ITEM_CODE: itemNo, // 아이템 코드
-          DESC_KO: desc, // 설명
-          QTY_KO: qty, // 수량
-          BOXES: ctn, // 박스수
+          PRODUCT_NAME: result,
+          ITEM_CODE: itemNo,
+          DESC_KO: desc,
+          QTY_KO: qty,
+          BOXES: ctn,
         });
       }
 
-      // ✅ 결과 시트만 생성
       const outWS = outWB.addWorksheet(sheetName.slice(0, 31));
 
       setWorksheetColumns(outWS, [
@@ -476,7 +457,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
       applyTableBorders(outWS, lastRow, lastCol);
 
-      // 수량/박스수 가운데 정렬
       outWS.getColumn("QTY_KO").eachCell((cell) => {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       });
@@ -485,7 +465,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       });
 
-      // 자동 열너비 적용
       autoFitColumns(outWS, {
         ITEM_CODE: 15,
         QTY_KO: 12,
@@ -505,6 +484,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       "Content-Disposition",
       `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`
     );
+
     res.send(Buffer.from(buf));
   } catch (e) {
     console.error("UPLOAD ERROR:", e);
