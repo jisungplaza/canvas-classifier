@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'><rect%20width='64'%20height='64'%20rx='14'%20fill='%232563EB'/><rect%20x='16'%20y='12'%20width='26'%20height='32'%20rx='3'%20fill='%23ffffff'/><rect%20x='21'%20y='18'%20width='16'%20height='4'%20rx='2'%20fill='%2393C5FD'/><rect%20x='21'%20y='26'%20width='12'%20height='4'%20rx='2'%20fill='%2360A5FA'/><circle%20cx='47'%20cy='47'%20r='11'%20fill='%2322C55E'/><path%20d='M42%2047l4%204%207-8'%20fill='none'%20stroke='white'%20stroke-width='4'%20stroke-linecap='round'%20stroke-linejoin='round'/></svg>">
+<title>캔버스 자동 분류기 - 오프라인</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+
+  <!--
+    오프라인 실행용입니다.
+    이 HTML 파일을 package.json / node_modules 폴더가 있는 기존 프로젝트 최상위 폴더에 넣고 실행하세요.
+    필요한 로컬 라이브러리:
+    - node_modules/xlsx/dist/xlsx.full.min.js
+    - node_modules/exceljs/dist/exceljs.min.js
+  -->
+  <script src="./node_modules/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="./node_modules/exceljs/dist/exceljs.min.js"></script>
+
+  <style>
+    :root{
+      --bg: #f6f8ff;
+      --card: rgba(255,255,255,.78);
+      --card2: rgba(255,255,255,.92);
+      --text: #0f172a;
+      --muted: rgba(15,23,42,.64);
+      --line: rgba(15,23,42,.10);
+      --accent: #4f7cff;
+      --accent2: #2dd4bf;
+      --danger: #d92d20;
+      --shadow: 0 18px 55px rgba(15,23,42,.12);
+      --radius: 18px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      padding:44px 18px;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Apple SD Gothic Neo","Noto Sans KR", Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 480px at 14% 8%, rgba(79,124,255,.16), transparent 60%),
+        radial-gradient(900px 480px at 86% 12%, rgba(45,212,191,.14), transparent 55%),
+        linear-gradient(180deg, var(--bg), #ffffff 72%);
+    }
+    .wrap{ max-width: 820px; margin: 0 auto; }
+    .hero{ margin-bottom: 18px; display:flex; align-items:center; gap:18px; }
+    .app-icon{
+      width:76px; height:76px; border-radius:22px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:42px; line-height:1; flex:0 0 auto;
+      background: linear-gradient(145deg, rgba(255,255,255,.96), rgba(220,235,255,.92));
+      border: 1px solid rgba(79,124,255,.28);
+      box-shadow: 0 16px 34px rgba(79,124,255,.20), inset 0 1px 0 rgba(255,255,255,.95);
+    }
+    .hero-text{ min-width:0; }
+    h1{ margin: 0 0 10px; font-size: 34px; letter-spacing: -0.6px; line-height: 1.15; font-weight: 800; }
+    .sub{ margin:0; color: var(--muted); font-size: 15px; line-height: 1.65; letter-spacing: -0.1px; }
+    .card{
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      border: 1px solid rgba(255,255,255,.75);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
+    }
+    .card-inner{
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) - 2px);
+      margin: 10px;
+      background: rgba(255,255,255,.82);
+    }
+    .row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    input[type="file"]{ display:none; }
+    .file-btn{
+      display:inline-flex; align-items:center; gap:10px; padding: 12px 14px; border-radius: 14px;
+      border: 1px solid rgba(15,23,42,.14); background: rgba(255,255,255,.9); cursor:pointer; user-select:none;
+      transition: transform .08s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+      box-shadow: 0 8px 22px rgba(15,23,42,.08);
+    }
+    .file-btn:hover{ border-color: rgba(79,124,255,.35); box-shadow: 0 12px 26px rgba(15,23,42,.10); background:#fff; }
+    .file-btn:active{ transform: translateY(1px); }
+    .pill{ width:10px;height:10px;border-radius:999px; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 0 0 5px rgba(79,124,255,.12); flex:0 0 auto; }
+    .btn-text{ font-size: 14px; font-weight: 750; letter-spacing: -0.2px; }
+    .filename{ color: var(--muted); font-size: 14px; letter-spacing: -0.1px; max-width: 520px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .notice{ margin-top:14px; padding:12px 14px; border-radius:14px; border:1px solid rgba(15,23,42,.10); background:rgba(255,255,255,.88); color:var(--muted); font-size:13px; line-height:1.6; letter-spacing:-0.1px; }
+    .notice .warn{ color:var(--danger); font-weight:800; letter-spacing:-0.2px; }
+    .notice b{ color:rgba(15,23,42,.92); font-weight:800; }
+    .status{ margin-top:14px; min-height:20px; font-size:14px; letter-spacing:-0.1px; color:var(--muted); white-space:pre-line; }
+    .status.ok{ color:rgba(6,95,70,.95); font-weight:800; }
+    .status.err{ color:var(--danger); font-weight:800; }
+    .foot{ margin-top:10px; color:rgba(15,23,42,.40); font-size:12px; letter-spacing:-0.1px; }
+    @media (max-width:520px){ body{ padding:34px 14px; } .hero{ gap:12px; } .app-icon{ width:62px; height:62px; border-radius:18px; font-size:34px; } h1{ font-size:28px; } .card-inner{ padding:18px; } .filename{ max-width:100%; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="app-icon" aria-hidden="true">🎨</div>
+      <div class="hero-text">
+        <h1>캔버스 자동 분류기</h1>
+        <p class="sub">오프라인에서 엑셀 파일을 선택하면 자동으로 분류 결과 파일이 다운로드됩니다.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-inner">
+        <div class="row">
+          <label class="file-btn" for="fileInput"><span class="pill"></span><span class="btn-text">파일 선택</span></label>
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.csv,.ods,*/*" />
+          <div id="fileName" class="filename"></div>
+        </div>
+        <div class="notice">
+          <span class="warn">주의</span> 이 파일은 기존 프로젝트 폴더의 <b>node_modules</b>를 로컬로 불러옵니다.<br/>
+          HTML 파일을 <b>package.json이 있는 위치</b>에 넣고 실행하세요.<br/>
+          엑셀의 <b>ITEM NO / DESCRIPTION / QUANTITY / CTN</b> 헤더 구성이 크게 다르면 변환이 실패할 수 있어요.
+        </div>
+        <div id="status" class="status"></div>
+        <div class="foot">파일 선택 → 브라우저에서 직접 변환 → 다운로드</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* -------------------- config/canvasConfig.js 내장 -------------------- */
+const CONFIG = {
+  sizeMap: [
+    { w: 18.0, h: 14.0, code: "0F" },
+    { w: 22.7, h: 15.8, code: "1F" }, { w: 22.7, h: 14.0, code: "1P" }, { w: 22.7, h: 12.0, code: "1M" }, { w: 15.8, h: 15.8, code: "1S" },
+    { w: 25.8, h: 17.9, code: "2F" }, { w: 25.8, h: 16.0, code: "2P" }, { w: 25.8, h: 14.0, code: "2M" }, { w: 17.9, h: 17.9, code: "2S" },
+    { w: 27.3, h: 22.0, code: "3F" }, { w: 27.3, h: 19.0, code: "3P" }, { w: 27.3, h: 16.0, code: "3M" }, { w: 22.0, h: 22.0, code: "3S" },
+    { w: 33.4, h: 24.2, code: "4F" }, { w: 33.4, h: 21.2, code: "4P" }, { w: 33.4, h: 19.0, code: "4M" }, { w: 24.2, h: 24.2, code: "4S" },
+    { w: 34.8, h: 27.3, code: "5F" }, { w: 34.8, h: 24.2, code: "5P" }, { w: 34.8, h: 21.2, code: "5M" }, { w: 27.3, h: 27.3, code: "5S" },
+    { w: 40.9, h: 31.8, code: "6F" }, { w: 40.9, h: 27.3, code: "6P" }, { w: 40.9, h: 24.2, code: "6M" }, { w: 31.8, h: 31.8, code: "6S" },
+    { w: 45.5, h: 37.9, code: "8F" }, { w: 45.5, h: 33.4, code: "8P" }, { w: 45.5, h: 27.3, code: "8M" }, { w: 37.9, h: 37.9, code: "8S" },
+    { w: 53.0, h: 45.5, code: "10F" }, { w: 53.0, h: 40.9, code: "10P" }, { w: 53.0, h: 33.4, code: "10M" }, { w: 45.5, h: 45.5, code: "10S" },
+    { w: 60.6, h: 50.0, code: "12F" }, { w: 60.6, h: 45.5, code: "12P" }, { w: 60.6, h: 40.9, code: "12M" }, { w: 50.0, h: 50.0, code: "12S" },
+    { w: 65.1, h: 53.0, code: "15F" }, { w: 65.1, h: 50.0, code: "15P" }, { w: 65.1, h: 45.5, code: "15M" }, { w: 53.0, h: 53.0, code: "15S" },
+    { w: 72.7, h: 60.6, code: "20F" }, { w: 72.7, h: 53.0, code: "20P" }, { w: 72.7, h: 50.0, code: "20M" }, { w: 60.6, h: 60.6, code: "20S" },
+    { w: 80.3, h: 65.1, code: "25F" }, { w: 80.3, h: 60.6, code: "25P" }, { w: 80.3, h: 53.0, code: "25M" }, { w: 65.1, h: 65.1, code: "25S" },
+    { w: 90.9, h: 72.7, code: "30F" }, { w: 90.9, h: 65.1, code: "30P" }, { w: 90.9, h: 60.6, code: "30M" }, { w: 72.7, h: 72.7, code: "30S" },
+    { w: 100.0, h: 80.3, code: "40F" }, { w: 100.0, h: 72.7, code: "40P" }, { w: 100.0, h: 65.1, code: "40M" }, { w: 80.3, h: 80.3, code: "40S" },
+    { w: 116.8, h: 91.0, code: "50F" }, { w: 116.8, h: 80.3, code: "50P" }, { w: 116.8, h: 72.7, code: "50M" }, { w: 91.0, h: 91.0, code: "50S" },
+    { w: 130.3, h: 97.0, code: "60F" }, { w: 130.3, h: 89.4, code: "60P" }, { w: 130.3, h: 80.3, code: "60M" }, { w: 97.0, h: 97.0, code: "60S" },
+    { w: 145.5, h: 112.1, code: "80F" }, { w: 145.5, h: 97.0, code: "80P" }, { w: 145.5, h: 89.4, code: "80M" }, { w: 112.1, h: 112.1, code: "80S" },
+    { w: 162.2, h: 130.3, code: "100F" }, { w: 162.2, h: 112.1, code: "100P" }, { w: 162.2, h: 97.0, code: "100M" }, { w: 130.3, h: 130.3, code: "100S" }
+  ],
+  typeRules: [
+    { labelKo: "판넬", keywords: ["birch panel", "birch", "paper lable", "paper label", "total thickness"] },
+    { labelKo: "프레임 캔버스", keywords: ["frame canvas"] },
+    { labelKo: "백스플라인 캔버스", keywords: ["back spline"] },
+    { labelKo: "아사 캔버스", keywords: ["linen"] },
+    { labelKo: "블랙 캔버스", keywords: ["black"] },
+    { labelKo: "캔버스보드", keywords: ["canvas panel", "board", "3mm thickness"] }
+  ],
+  roundConfig: { keywords: ["dia", "ø", "⌀"] },
+  thicknessMap: [
+    { w: 2.4, h: 1.6, labelKo: "쿠팡용 캔버스", nos: [0] },
+    { w: 2.9, h: 1.6, labelKo: "정왁구캔버스(주황)", nos: [0] },
+    { w: 3.5, h: 1.8, labelKo: "정왁구캔버스(주황)", nos: [1, 2] },
+    { w: 4.0, h: 1.8, labelKo: "정왁구캔버스(주황)", nos: [3, 4, 6, 8, 10, 12, 15] },
+    { w: 4.5, h: 2.0, labelKo: "정왁구캔버스(주황)", nos: [20, 25] },
+    { w: 3.8, h: 3.8, labelKo: "정왁구캔버스(주황)", nos: [30] },
+    { w: 5.7, h: 3.6, labelKo: "정왁구캔버스(주황)", nos: [100] }
+  ],
+  excludedForThickness: ["linen", "black", "back spline", "frame canvas", "3d"],
+  manualOverrides: {},
+  sizeTolerance: 0.2,
+  thicknessTolerance: 0.15,
+  defaultTypeLabel: "일반캔버스(파랑)"
+};
+
+const {
+  sizeMap, typeRules, roundConfig, thicknessMap, excludedForThickness,
+  manualOverrides, sizeTolerance, thicknessTolerance, defaultTypeLabel
+} = CONFIG;
+
+/* -------------------- 분류 로직 -------------------- */
+function sanitizeNumericTypos(text) {
+  return (text || "").toString().replace(/(\d)\.\.(\d)/g, "$1.$2").replace(/(\d)\.{2,}(\d)/g, "$1.$2");
+}
+function normalize(text) {
+  const fixed = sanitizeNumericTypos(text);
+  return fixed.toString().trim().toLowerCase();
+}
+function detectTriangle(text) {
+  const t = normalize(text);
+  if (!t.includes("triangle")) return null;
+  const m = t.match(/triangle[^0-9]*([0-9]{1,3}(\.[0-9]+)?)/i);
+  if (!m) return null;
+  return parseFloat(m[1]);
+}
+function detectRound(text) {
+  const t = normalize(text);
+  const mDia = t.match(/dia[^0-9]*([0-9]{1,3}(\.[0-9]+)?)/i);
+  if (mDia) return { isRound: true, diameter: parseFloat(mDia[1]) };
+  const found = roundConfig.keywords.some((kw) => t.includes(kw));
+  if (!found) return null;
+  const num = t.match(/(\d+(\.\d+)?)/);
+  const d = num ? parseFloat(num[1]) : null;
+  return { isRound: true, diameter: d };
+}
+function detectType(text) {
+  const t = normalize(text);
+  for (const rule of typeRules) {
+    if (rule.keywords.some((kw) => t.includes(kw))) return rule.labelKo;
+  }
+  return defaultTypeLabel;
+}
+function parseSize(text) {
+  const t = normalize(text);
+  const hasDia = roundConfig.keywords.some((kw) => t.includes(kw));
+  if (hasDia) return { shape: "round" };
+  const re = /(\d+(\.\d+)?)\s*[x×*]\s*(\d+(\.\d+)?)/g;
+  let match, best = null, bestArea = 0;
+  while ((match = re.exec(t)) !== null) {
+    const w = parseFloat(match[1]);
+    const h = parseFloat(match[3]);
+    const area = w * h;
+    if (area > bestArea) { bestArea = area; best = { w, h }; }
+  }
+  if (!best) return null;
+  return { shape: "rect", w: best.w, h: best.h };
+}
+function detectThickness(text, hoNumber) {
+  if (hoNumber == null) return null;
+  if (!Array.isArray(thicknessMap) || thicknessMap.length === 0) return null;
+  const t = normalize(text);
+  const re = /(\d+(\.\d+)?)\s*[x×*]\s*(\d+(\.\d+)?)/g;
+  let match, smallest = null, smallestArea = Infinity;
+  while ((match = re.exec(t)) !== null) {
+    const w = parseFloat(match[1]);
+    const h = parseFloat(match[3]);
+    const area = w * h;
+    if (area < smallestArea) { smallestArea = area; smallest = { w, h }; }
+  }
+  if (!smallest) return null;
+  let best = null, bestScore = Infinity;
+  for (const rule of thicknessMap) {
+    if (!rule.nos || !rule.nos.includes(hoNumber)) continue;
+    const score = Math.abs(rule.w - smallest.w) + Math.abs(rule.h - smallest.h);
+    if (score < bestScore && score <= thicknessTolerance) { bestScore = score; best = rule; }
+  }
+  return best ? best.labelKo : null;
+}
+function findSizeCode(w, h) {
+  let best = null, bestScore = 999;
+  for (const s of sizeMap) {
+    const score1 = Math.abs(s.w - w) + Math.abs(s.h - h);
+    const score2 = Math.abs(s.w - h) + Math.abs(s.h - w);
+    const score = Math.min(score1, score2);
+    const dw = score === score1 ? Math.abs(s.w - w) : Math.abs(s.w - h);
+    const dh = score === score1 ? Math.abs(s.h - h) : Math.abs(s.h - w);
+    if (dw <= sizeTolerance && dh <= sizeTolerance && score < bestScore) {
+      best = s; bestScore = score;
+    }
+  }
+  return best;
+}
+function classifyText(fullText) {
+  const text = (fullText || "").toString();
+  const lower = normalize(text);
+  if (!/canvas|panel/.test(lower)) return "";
+  const baseType = detectType(text);
+
+  // OVAL + canvas panel은 호수 매칭하지 않고 실제 규격 그대로 표기
+  // 예: canvas panel ... oval 20x30 → 타원형 캔버스보드 20X30
+  const ovalMatch = lower.match(/oval[^0-9]*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+  if (ovalMatch && baseType === "캔버스보드") {
+    const ow = ovalMatch[1].replace(/\.0$/, "");
+    const oh = ovalMatch[2].replace(/\.0$/, "");
+    return `타원형 캔버스보드 ${ow}X${oh}`;
+  }
+
+  const tri = detectTriangle(text);
+  if (tri !== null) return baseType === "캔버스보드" ? `캔버스보드 삼각형 ${tri}` : `삼각형 ${tri}`;
+  const round = detectRound(text);
+  if (round) return baseType === "캔버스보드" ? `캔버스보드 원형 ${round.diameter || ""}` : `원형캔버스 지름 ${round.diameter || ""}`;
+  const parsed = parseSize(text);
+  let code = "", sizeLabel = "", hoNumber = null;
+  if (parsed && parsed.shape === "rect") {
+    const matched = findSizeCode(parsed.w, parsed.h);
+    if (matched) {
+      code = matched.code;
+      const num = parseInt(matched.code.replace(/[^0-9]/g, ""), 10);
+      if (!Number.isNaN(num)) hoNumber = num;
+    } else {
+      sizeLabel = `${parsed.w}x${parsed.h}`;
+    }
+  }
+  let thicknessType = null;
+  const isExcluded = excludedForThickness.some((x) => lower.includes(x));
+  if (!isExcluded && hoNumber !== null) thicknessType = detectThickness(text, hoNumber);
+  const finalType = thicknessType || baseType;
+  if (code) return `${finalType} ${code}`.trim();
+  if (sizeLabel) return `${finalType} ${sizeLabel}`.trim();
+  return finalType;
+}
+
+/* -------------------- 엑셀 처리 로직 -------------------- */
+function normCell(v) {
+  return (v ?? "").toString().trim().toUpperCase().replace(/\s+/g, "");
+}
+function findHeaderInfo(rows) {
+  let headerRowIndex = -1, itemCol = -1, descCol = -1, qtyCol = -1, ctnCol = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    for (let j = 0; j < row.length; j++) {
+      const n = normCell(row[j]);
+      if (!n) continue;
+      if (n.includes("ITEMNO")) itemCol = j;
+      if (n.startsWith("DESC") || n.startsWith("DESCRIPT")) descCol = j;
+      if (n.startsWith("QTY") || n.startsWith("QUANTITY")) qtyCol = j;
+      if (ctnCol === -1 && (n === "CTN" || n.includes("CTN(CTN)") || n.startsWith("CTN") || n.includes("CTNS") || n.includes("CARTON"))) ctnCol = j;
+    }
+    if (itemCol !== -1 || descCol !== -1 || qtyCol !== -1 || ctnCol !== -1) {
+      headerRowIndex = i;
+      break;
+    }
+  }
+  return { headerRowIndex, itemCol, descCol, qtyCol, ctnCol };
+}
+const THIN_BORDER = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+function setWorksheetColumns(ws, columns) {
+  ws.columns = columns;
+  const headerRow = ws.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.alignment = { vertical: "middle", horizontal: "center" };
+  headerRow.height = 18;
+  headerRow.eachCell((cell) => { cell.border = THIN_BORDER; });
+}
+function applyTableBorders(ws, lastRowNumber, lastColNumber) {
+  for (let r = 2; r <= lastRowNumber; r++) {
+    const row = ws.getRow(r);
+    row.height = 16;
+    for (let c = 1; c <= lastColNumber; c++) {
+      const cell = row.getCell(c);
+      cell.border = THIN_BORDER;
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
+    }
+  }
+}
+function getExcelTextWidth(value) {
+  if (value == null) return 0;
+  const text = value.toString();
+  let width = 0;
+  for (const ch of text) {
+    if (/[ㄱ-ㅎㅏ-ㅣ가-힣一-龥㐀-䶵぀-ヿＡ-Ｚａ-ｚ０-９]/.test(ch)) width += 2;
+    else width += 1;
+  }
+  return width;
+}
+function autoFitColumns(ws) {
+  ws.columns.forEach((col) => {
+    let maxWidth = getExcelTextWidth(col.header || "");
+    col.eachCell({ includeEmpty: true }, (cell) => {
+      let cellValue = cell.value;
+      if (cellValue && typeof cellValue === "object" && cellValue.richText) cellValue = cellValue.richText.map((r) => r.text).join("");
+      const lines = (cellValue == null ? "" : cellValue.toString()).split(/\r?\n/);
+      for (const line of lines) maxWidth = Math.max(maxWidth, getExcelTextWidth(line));
+    });
+    // 모든 컬럼을 글자 길이에 맞춰 자동 확장. 너무 긴 설명은 최대 100으로 제한.
+    col.width = Math.max(8, Math.min(maxWidth + 2, 100));
+  });
+}
+function hexToArgb(hex) {
+  return "FF" + hex.replace("#", "").toUpperCase();
+}
+const RESULT_COLOR_RULES = [
+  { keywords: ["블랙 캔버스", "블랙캔버스"], bg: "#000000" },
+  { keywords: ["수채캔버스보드", "수채 캔버스보드", "watercolor"], bg: "#7ABF48" },
+  { keywords: ["캔버스보드"], bg: "#009D35" },
+  { keywords: ["프레임 캔버스", "프레임캔버스"], bg: "#70388B" },
+  { keywords: ["아사 캔버스", "아사캔버스", "linen"], bg: "#AB6822" },
+  { keywords: ["정왁구캔버스", "쿠팡용 캔버스", "주황캔버스", "주황 캔버스"], bg: "#ED6D00" },
+  { keywords: ["백스플라인 캔버스", "백스플라인캔버스"], bg: "#F4BD00" },
+  { keywords: ["판넬"], bg: "#FB2BE0" },
+  { keywords: ["일반캔버스", "원형캔버스", "삼각형"], bg: "#1157A7" },
+];
+function getResultColor(resultText) {
+  const text = (resultText || "").toString().toLowerCase();
+  for (const rule of RESULT_COLOR_RULES) {
+    if (rule.keywords.some((kw) => text.includes(kw.toLowerCase()))) return rule.bg;
+  }
+  return null;
+}
+function applyResultColors(ws) {
+  const productCol = ws.getColumn("PRODUCT_NAME").number;
+
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const productCell = row.getCell(productCol);
+    const resultText = productCell.value;
+    const bg = getResultColor(resultText);
+
+    // 색상은 캔버스 이름(상품명) 셀에만 적용
+    if (bg) {
+      productCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: hexToArgb(bg) },
+      };
+      productCell.font = {
+        color: { argb: "FFFFFFFF" },
+        bold: true,
+      };
+      productCell.alignment = {
+        vertical: "middle",
+        horizontal: "center",
+        wrapText: true,
+      };
+    } else {
+      productCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFFFFF" },
+      };
+      productCell.font = {
+        color: { argb: "FF000000" },
+        bold: true,
+      };
+    }
+  }
+}
+function safeSheetName(name, used) {
+  let base = (name || "Sheet").toString().slice(0, 31).replace(/[\\/*?:\[\]]/g, " ").trim() || "Sheet";
+  let finalName = base;
+  let n = 1;
+  while (used.has(finalName)) {
+    const suffix = `_${n++}`;
+    finalName = base.slice(0, 31 - suffix.length) + suffix;
+  }
+  used.add(finalName);
+  return finalName;
+}
+function getBaseName(filename) {
+  return (filename || "result").replace(/\.[^/.]+$/, "");
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+async function processWorkbook(file) {
+  if (!window.XLSX) throw new Error("XLSX 로컬 라이브러리를 찾지 못했습니다. node_modules/xlsx/dist/xlsx.full.min.js 경로를 확인하세요.");
+  if (!window.ExcelJS) throw new Error("ExcelJS 로컬 라이브러리를 찾지 못했습니다. node_modules/exceljs/dist/exceljs.min.js 경로를 확인하세요.");
+
+  const arrayBuffer = await file.arrayBuffer();
+  const inWB = XLSX.read(arrayBuffer, { type: "array" });
+  const outWB = new ExcelJS.Workbook();
+  outWB.creator = "canvas-classifier-offline";
+  outWB.created = new Date();
+
+  let processedSheets = 0;
+  const usedSheetNames = new Set();
+
+  for (const sheetName of inWB.SheetNames) {
+    const ws = inWB.Sheets[sheetName];
+    if (!ws) continue;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (!rows.length) continue;
+
+    const { headerRowIndex, itemCol, descCol, qtyCol, ctnCol } = findHeaderInfo(rows);
+    if (headerRowIndex === -1) {
+      throw new Error(`엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\n헤더(ITEM NO / DESCRIPTION / QUANTITY / CTN)를 찾지 못했습니다.`);
+    }
+    const missingCore = (itemCol === -1 ? 1 : 0) + (descCol === -1 ? 1 : 0) + (qtyCol === -1 ? 1 : 0);
+    if (missingCore >= 2) {
+      throw new Error(`엑셀 구조가 기존 설정과 달라 해석할 수 없습니다 (${sheetName}).\nITEM NO / DESCRIPTION / QUANTITY 중 다수가 없습니다.`);
+    }
+
+    const filteredRows = [];
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const rowArr = rows[i] || [];
+      const itemNo = itemCol >= 0 ? rowArr[itemCol] || "" : "";
+      const desc = descCol >= 0 ? rowArr[descCol] || "" : "";
+      const qty = qtyCol >= 0 ? rowArr[qtyCol] || "" : "";
+      const ctn = ctnCol >= 0 ? rowArr[ctnCol] || "" : "";
+      let result = "";
+      if (itemNo || qty || ctn) {
+        if (itemNo && manualOverrides && manualOverrides[itemNo]) {
+          const ov = manualOverrides[itemNo];
+          result = `${ov.kind || defaultTypeLabel} ${ov.code || ""}`.trim();
+        } else {
+          result = classifyText(rowArr.join(" "));
+        }
+      }
+      if (!result && !itemNo && !desc && !qty && !ctn) continue;
+      filteredRows.push({ PRODUCT_NAME: result, ITEM_CODE: itemNo, DESC_KO: desc, QTY_KO: qty, BOXES: ctn });
+    }
+
+    const outWS = outWB.addWorksheet(safeSheetName(sheetName, usedSheetNames));
+    setWorksheetColumns(outWS, [
+      { header: "상품명", key: "PRODUCT_NAME", width: 20 },
+      { header: "아이템 코드", key: "ITEM_CODE", width: 15 },
+      { header: "설명", key: "DESC_KO", width: 40 },
+      { header: "수량", key: "QTY_KO", width: 12 },
+      { header: "박스수", key: "BOXES", width: 12 },
+    ]);
+    filteredRows.forEach((r) => outWS.addRow(r));
+    applyTableBorders(outWS, outWS.rowCount, outWS.columnCount);
+    applyResultColors(outWS);
+    outWS.getColumn("QTY_KO").eachCell((cell) => { cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false }; });
+    outWS.getColumn("BOXES").eachCell((cell) => { cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false }; });
+    autoFitColumns(outWS);
+    processedSheets++;
+  }
+
+  if (processedSheets === 0) throw new Error("처리 가능한 시트가 없습니다. (빈 파일이거나 구조가 다릅니다)");
+
+  const buf = await outWB.xlsx.writeBuffer();
+  const downloadName = `${getBaseName(file.name)}_분류결과.xlsx`;
+  downloadBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), downloadName);
+  return { processedSheets, downloadName };
+}
+
+const fileInput = document.getElementById("fileInput");
+const statusEl = document.getElementById("status");
+const fileNameEl = document.getElementById("fileName");
+
+function checkLibsOnLoad() {
+  if (!window.XLSX || !window.ExcelJS) {
+    statusEl.className = "status err";
+    statusEl.textContent = "로컬 라이브러리 로드 실패\n이 HTML 파일을 package.json / node_modules 폴더가 있는 기존 프로젝트 최상위 폴더에 넣고 다시 열어주세요.";
+  }
+}
+window.addEventListener("load", checkLibsOnLoad);
+
+fileInput.addEventListener("change", async () => {
+  statusEl.textContent = "";
+  statusEl.className = "status";
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  fileNameEl.textContent = file.name;
+  try {
+    statusEl.textContent = "변환 중…";
+    const result = await processWorkbook(file);
+    statusEl.className = "status ok";
+    statusEl.textContent = `변환 완료! 파일이 다운로드되었습니다.\n처리 시트: ${result.processedSheets}개`;
+  } catch (e) {
+    console.error(e);
+    statusEl.className = "status err";
+    statusEl.textContent = "실패: " + (e && e.message ? e.message : "처리 실패");
+  } finally {
+    fileInput.value = "";
+  }
+});
+</script>
+</body>
+</html>

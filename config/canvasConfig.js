@@ -113,6 +113,10 @@ module.exports = {
     { w: 162.2, h: 112.1, code: "100P" },
     { w: 162.2, h: 97.0, code: "100M" },
     { w: 130.3, h: 130.3, code: "100S" },
+
+    // 120호
+    { w: 193.9, h: 130.3, code: "120F" },
+
   ],
 
   // 📌 종류판별 규칙
@@ -172,8 +176,13 @@ module.exports = {
     "3d",
   ],
 
-  // 📌 SKU 수동 오버라이드
-  manualOverrides: {},
+// 📌 SKU 수동 오버라이드
+manualOverrides: {
+  JS380F120H: {
+    kind: "일반캔버스(파랑)",
+    code: "120F",
+  },
+},
 
   // 📌 사이즈 비교 허용 오차
   sizeTolerance: 0.2,
